@@ -1,36 +1,57 @@
-const express = require("express");
-const { Client, GatewayIntentBits } = require("discord.js");
-const { joinVoiceChannel } = require("@discordjs/voice");
+const { Client, GatewayIntentBits } = require('discord.js');
+const { joinVoiceChannel } = require('@discordjs/voice');
+const express = require('express');
+require('dotenv').config();
 
+// --- WEB SERVER SETUP (For cron-job.org and Render) ---
 const app = express();
-const PORT = process.env.PORT || 3000;
+const port = process.env.PORT || 3000;
 
-// Web server for Render + cron-job ping
-app.get("/", (req, res) => {
-  res.send("Bot is alive");
+app.get('/', (req, res) => {
+    res.send('Bot is active and running!');
 });
 
-app.listen(PORT, () => {
-  console.log("Server running on port " + PORT);
+app.listen(port, () => {
+    console.log(`Dummy web server listening on port ${port}`);
 });
 
-// Discord bot
+// --- DISCORD BOT SETUP ---
 const client = new Client({
-  intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildVoiceStates]
+    intents: [
+        GatewayIntentBits.Guilds,
+        GatewayIntentBits.GuildVoiceStates
+    ]
 });
 
-client.once("ready", async () => {
-  console.log(`Logged in as ${client.user.tag}`);
+client.on('ready', async () => {
+    console.log(`Logged in as ${client.user.tag}!`);
 
-  const channel = await client.channels.fetch(process.env.CHANNEL_ID);
+    const guildId = process.env.GUILD_ID;
+    const channelId = process.env.VOICE_CHANNEL_ID;
 
-  joinVoiceChannel({
-    channelId: channel.id,
-    guildId: channel.guild.id,
-    adapterCreator: channel.guild.voiceAdapterCreator,
-  });
+    try {
+        const guild = await client.guilds.fetch(guildId);
+        const channel = await guild.channels.fetch(channelId);
 
-  console.log("Joined voice channel");
+        if (!channel || !channel.isVoiceBased()) {
+            console.error('Voice channel not found or is not a voice channel.');
+            return;
+        }
+
+        // Join the voice channel and stay muted/deafened to save bandwidth
+        joinVoiceChannel({
+            channelId: channel.id,
+            guildId: guild.id,
+            adapterCreator: guild.voiceAdapterCreator,
+            selfDeaf: true,
+            selfMute: true
+        });
+
+        console.log('Successfully connected to the voice channel!');
+    } catch (error) {
+        console.error('Error connecting to the channel:', error);
+    }
 });
 
-client.login(process.env.TOKEN);
+// Log in using the token from Render's Environment Variables
+client.login(process.env.DISCORD_TOKEN);
