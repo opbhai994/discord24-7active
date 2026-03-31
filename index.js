@@ -1,57 +1,43 @@
-const { Client, GatewayIntentBits } = require('discord.js');
-const { joinVoiceChannel } = require('@discordjs/voice');
-const express = require('express');
-require('dotenv').config();
+const { Client } = require("discord.js-selfbot-v13");
+const { joinVoiceChannel } = require("@discordjs/voice");
+const http = require("http");
 
-// --- WEB SERVER SETUP (For cron-job.org and Render) ---
-const app = express();
-const port = process.env.PORT || 3000;
+const client = new Client();
 
-app.get('/', (req, res) => {
-    res.send('Bot is active and running!');
+// HTTP server to keep Render service alive (port forwarding)
+const PORT = process.env.PORT || 3000;
+const server = http.createServer((req, res) => {
+  res.writeHead(200, { "Content-Type": "text/plain" });
+  res.end("Bot is running!\n");
 });
 
-app.listen(port, () => {
-    console.log(`Dummy web server listening on port ${port}`);
+server.listen(PORT, () => {
+  console.log(`HTTP server listening on port ${PORT}`);
 });
 
-// --- DISCORD BOT SETUP ---
-const client = new Client({
-    intents: [
-        GatewayIntentBits.Guilds,
-        GatewayIntentBits.GuildVoiceStates
-    ]
+client.on("ready", async () => {
+  console.log(`${client.user.username} logged in`);
+
+  const channel = await client.channels.fetch(process.env.CHANNEL_ID);
+
+  joinVoiceChannel({
+    channelId: channel.id,
+    guildId: channel.guild.id,
+    adapterCreator: channel.guild.voiceAdapterCreator,
+    selfDeaf: false,
+  });
+
+  console.log("Joined voice channel");
 });
 
-client.on('ready', async () => {
-    console.log(`Logged in as ${client.user.tag}!`);
-
-    const guildId = process.env.GUILD_ID;
-    const channelId = process.env.VOICE_CHANNEL_ID;
-
-    try {
-        const guild = await client.guilds.fetch(guildId);
-        const channel = await guild.channels.fetch(channelId);
-
-        if (!channel || !channel.isVoiceBased()) {
-            console.error('Voice channel not found or is not a voice channel.');
-            return;
-        }
-
-        // Join the voice channel and stay muted/deafened to save bandwidth
-        joinVoiceChannel({
-            channelId: channel.id,
-            guildId: guild.id,
-            adapterCreator: guild.voiceAdapterCreator,
-            selfDeaf: true,
-            selfMute: true
-        });
-
-        console.log('Successfully connected to the voice channel!');
-    } catch (error) {
-        console.error('Error connecting to the channel:', error);
-    }
+// Auto-reconnect on disconnect
+client.on("disconnect", () => {
+  console.log("Bot disconnected. Reconnecting...");
+  client.login(process.env.TOKEN);
 });
 
-// Log in using the token from Render's Environment Variables
-client.login(process.env.DISCORD_TOKEN);
+client.on("error", (err) => {
+  console.error("Client error:", err);
+});
+
+client.login(process.env.TOKEN);
